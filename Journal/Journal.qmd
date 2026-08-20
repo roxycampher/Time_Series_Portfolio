@@ -1,0 +1,49 @@
+---
+course: "Time Series"
+assignment: "Journal Entries"
+student-number: "CMPROX001"
+format:
+  pdf:
+    colorlinks: true
+    linkcolor: blue
+    urlcolor: blue
+    documentclass: article
+    fontsize: 12pt
+    geometry:
+      - left=3cm
+      - right=3cm
+      - top=2.5cm
+      - bottom=2.5cm
+    toc: false
+    toc-depth: 3
+    number-sections: false
+    listings: true
+    include-in-header: 
+      - metadata.tex
+      - header.tex
+    include-before-body: title.tex
+execute:
+  warning: false
+  message: false
+editor: visual
+---
+
+## Journal Entry 1
+
+17/08/2026
+
+During this lecture we discussed the basics of Time series such as the different components that drive a time series and how they work. I understood most of what was discussed. 
+
+I do want to practice plotting some of the built in R datasets to see what they look like. I want to see how a qualitative, continuous and discrete time series look so I worked through different datasets in L1_2_workflow.R.
+
+I also worked through the first half of the "Time Series Analysis in R.pdf" code to undertand how the different functions work.
+
+## Journal Entry 2
+
+19/08/2026
+
+This week we had two lectures that covered benchmarks and forecast accuracy and the three main validation strategies. We learnt about benchmark forecast methods such as mean, naive, seasonal naive and the drift method. These are what more sophisticated models will be compared against to determine their forecasting accuracy. They help answer the question"Does our more complex model actually forecast better than a very simple benchmark?". The main Time Series validation strategies are: Walk-forward validation, expanding window validation and sliding window validation.
+
+In the "L3_4_workflow.R" file I will attempt to construct an expanding-window cross validation from first principles and I also completed the exercise in the slides on cross validation.
+
+The Time Series cross validation does make sense to me. The only thing that confuses me is whether there truly is a difference between expanding window and walk-forward windows.

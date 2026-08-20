@@ -1,0 +1,12 @@
+---
+title: "AI Log"
+author: "Roxy Campher"
+format: pdf
+editor: visual
+---
+
+## AI usage log
+
+20/08/2026
+
+Asked for assistance on data cleaning and how to read in excel files and exclude the headings.

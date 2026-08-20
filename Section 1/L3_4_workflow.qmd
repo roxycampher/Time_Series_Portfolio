@@ -1,0 +1,85 @@
+---
+title: "L3_4_workflow"
+author: "Roxy Campher"
+format: pdf
+editor: visual
+---
+
+```{r}
+#| echo: false
+
+# load required libraries:
+library(betareg)
+library(ggplot2)
+library(dplyr)
+library(purrr)
+```
+
+```{r}
+library(forecast)
+
+y <- AirPassengers
+
+n <- length(y)
+
+initial <- 24
+
+errors <- rep(NA, n)
+predictions <- rep(NA, n)
+
+for (T in initial:(n - 1)) {
+  
+  # 1) Create training data
+  train <- y[1:T]
+  
+  # 2) Seasonal naive forecast
+  # same month last year
+  prediction <- train[T - 12 + 1]
+  
+  # 3) Get actual future observation
+  actual <- y[T + 1]
+  
+  # 4) Calculate forecast error
+  error <- actual - prediction
+  
+  # 5) Store results
+  predictions[T + 1] <- prediction
+  errors[T + 1] <- error
+}
+
+RMSE <- sqrt(mean(errors^2, na.rm = TRUE))
+
+RMSE
+
+MAE <- mean(abs(errors), na.rm = TRUE)
+
+MAE
+```
+
+Which holds since RMSE \> MAE.
+
+Exercises slide 72:
+
+1\) Why is ordinary random k-fold cross-validation inappropriate for forecasting?
+
+Ordinary random k-fold cross-validation divides the data into k folds and randomly leaves one fold out for validating the data. The remaining k -1 folds are used as the training set and the model is trained with those. The issue is that Time Series data is sequential and dependent and randomly splitting the dataz into k-folds would destroy the temporal ordering of the series So the test set can only be values that are ahead of the training values.
+
+2\) Define temporal leakage.
+
+Temporal leakage is when data from the future is used to train a model that has to predict that future.
+
+3\) Contrast Walk-Forward, Expanding Window and Sliding Window Validation.
+
+Walk-Forward validation evaluates a forecasting model by repeatedly fitting it on past data and testing it on future observations while preserving time order. In an expanding window all previous observations are retained so the training set grows over time. In a sliding window, the training set has a fixed length so older observations are dropped as newer observations become available. Expanding windows are informative when all past data remains relevant where sliding window is useful when recent data is more relevant to the forecast model.
+
+4\) When would Sliding window outperform Expanding window?
+
+I think that sliding window will outperform the expanding window when beyond a certain past time threshold the data will not be informative for forecasting the future. For example milk sales data from 30 years ago might not apply to milk sales today with people changing to plant based milks etc so the market trends might not be applicable now.
+
+5\) A firm refits its model daily using only the most recent 250 observations. Which strategy is this?
+
+This is the sliding window strategy, because the model is being refitted to a fixed sized training window containing only the most recent 250 observations.
+
+6\) Why must temporal ordering be preserved during validation?
+
+Because otherwise the results will not be accurate as Time Series data must be temporal.

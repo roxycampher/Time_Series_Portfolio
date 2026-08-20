@@ -1,0 +1,177 @@
+---
+title: "Lecture 1 and 2 Workthrough"
+author: "Roxy Campher"
+format: pdf
+editor: visual
+---
+
+```{r}
+#| echo: false
+
+# load required libraries:
+library(betareg)
+library(ggplot2)
+library(dplyr)
+library(purrr)
+```
+
+For a Qualitative Time Series:
+
+```{r}
+library(ctsfeatures)
+data("SleepStages")
+
+library(dplyr)
+library(lubridate)
+
+# Aggregate the data from seconds to minutes
+SleepStages_min <- SleepStages |>
+  mutate(
+    Time2 = hms(as.character(Time)),
+    Minute = floor(period_to_seconds(Time2) / 60)
+  ) |>
+  group_by(Series, Minute) |>
+  count(Value) |>
+  slice_max(n, n = 1, with_ties = FALSE) |>
+  select(Series, Minute, Value)
+
+# Choose one series first
+sleep1 <- SleepStages |>
+  filter(Series == 1) |>
+  mutate(
+    Time_sec = period_to_seconds(hms(as.character(Time))),
+    Time_min = Time_sec / 60
+  )
+
+ggplot(sleep1, aes(x = Time_min, y = Value, group = 1)) +
+  geom_step(col = "hotpink", lwd = 0.7) +
+  labs(
+    title = "Sleep Stages over Time",
+    x = "Time (minutes)",
+    y = "Sleep Stage"
+  ) +
+  theme_minimal()
+```
+
+For Continuous Time Series:
+
+```{r}
+data(Nile)
+
+plot.ts(Nile,
+        main = "Plot of the Nile dataset.",
+        xlab = "Year",
+        ylab = "Flow",
+        col = "hotpink",
+        type = "l",
+        lwd = 2,
+        lty = 1
+        )
+```
+
+For Discrete Time Series:
+
+```{r}
+data(lynx)
+
+barplot(
+  as.numeric(lynx),
+  main = "Annual Canadian Lynx Trappings",
+  xlab = "Year",
+  ylab = "Number of Lynx",
+  col = "hotpink"
+)
+```
+
+Now I will follow the same structure as in the "Time Series Analysis in R.pdf" and practice some of the functions taught in class.
+
+Aggregation example:
+
+```{r}
+data("AirPassengers")
+
+print(frequency(AirPassengers))
+
+months_to_years <- aggregate(AirPassengers, nfrequency = 1, FUN = mean)
+class(months_to_years)
+
+plot.ts(months_to_years,
+        main = "Plot of the aggrgated AirPassengers data.",
+        xlab = "Year",
+        ylab = "Yearly Mean.",
+        col = "hotpink",
+        type = "l",
+        lwd = 2,
+        lty = 1
+)
+```
+
+Since the AirPassenger data is monthly (frequency = 12) I aggregated it to annual data to see what it would look like since we are lower the granularity.
+
+Window:
+
+Now I want to plot a subset of the AirPassenger data to practice writing out the window function.
+
+```{r}
+window1 <- window(AirPassengers, start = c(1955, 1), end = c(1958, 12))
+
+plot.ts(window1,
+        main = "Plot of the a window of the AirPassengers data.",
+        xlab = "Month",
+        ylab = "Total airline passengers.",
+        col = "hotpink",
+        type = "l",
+        lwd = 2,
+        lty = 1
+)
+```
+
+Trying lag() and diff() on a simulated dataset:
+
+```{r}
+ts_sim <- ts(c(11, 16, 21, 33, 40, 54, 59, 60, 66, 70, 73, 75),
+             start = c(2025, 1),
+             frequency = 12)
+
+print(ts_sim)
+
+# Shifts the time index backwards by 1 period
+lagged_ts <- stats::lag(ts_sim, k = 1)
+lagged_ts
+
+# First order differencing removes the linear trend
+diff_ts <- diff(ts_sim, differences = 1)
+diff_ts
+```
+
+Checking out ts.union() and ts.intersect():
+
+```{r}
+ts_a <- ts(1:10, start = c(2023, 1), frequency = 12)
+ts_b <- ts(11:18, start = c(2023, 4), frequency = 12)
+
+# Union
+combined_un <- ts.union(ts_a, ts_b)
+combined_un
+
+# Intersect
+itersect_ts <- ts.intersect(ts_a, ts_b)
+itersect_ts
+```
+
+What is the structure of the ts object:
+
+```{r}
+raw_data <- data.frame(
+  Month = 1:12,
+  Value = c(10, 12, 15, 14, 18, 22, 25, 24, 20, 15, 12, 11,
+            12, 14, 17, 16, 20, 24, 28, 27, 22, 17, 14, 13)
+)
+
+ts_sim2 <- ts(raw_data$Value, start = c(2024, 1), frequency = 12)
+
+decom <- decompose(ts_sim2)
+plot(decom)
+
+plot(ts_sim2, type = "o", pch = 20, main = "Demonstration of ts Object.", ylab = "Values", xlab = "Time", col = "hotpink")
+```
