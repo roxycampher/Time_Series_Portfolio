@@ -1,0 +1,83 @@
+---
+title: "Section 1 Rough"
+author: "Roxy Campher"
+format: pdf
+editor: visual
+---
+
+## Rough working of section 1
+
+A QMD for playing around with base R time series datasets. I want to explore how to fit the models on a basic dataset before diving into more complex data.
+
+### Journal notes
+
+Make a journal entry about exploring basic Time Series datasets.
+
+## Base R Time Series Datasets
+
+### AirPassengers
+
+```{r}
+data(AirPassengers)
+
+AirPassengers
+class(AirPassengers) # it is a ts object
+
+plot(AirPassengers)
+
+frequency(AirPassengers) # number of observations per unit
+start(AirPassengers) # returns the start time of the series
+end(AirPassengers) # returns the end time of the series
+
+acf(AirPassengers)
+pacf(AirPassengers)
+
+win <- window(AirPassengers, start = c(1950, 1), end = c(1955, 12))
+print(win)
+
+diff_delta <- diff(AirPassengers)
+plot(diff_delta)
+```
+
+### Nile - ARIMA
+
+Annual - no seasonal component to worry about.
+
+```{r}
+data(Nile)
+plot(Nile)
+```
+
+### Nottem
+
+Has obvious seasonality
+
+```{r}
+data("nottem")
+plot(nottem)
+```
+
+### EUStockMarkets
+
+This is particularly useful for understanding the difference between a nonstationary price/index series and approximately stationary returns.
+
+```{r}
+data("EuStockMarkets")
+plot(EuStockMarkets)
+
+dax <- EuStockMarkets[, "DAX"]
+plot(dax)
+
+returns <- diff(log(dax))
+plot(returns)
+```
+
+# Portfolio models to compare with market volatility data - JSE?
+
+Ask Tim for data or where to download data.
+
+ARCH and GARCH vs Auto regressive models. Particularly - ARIMA vs GARCH could be useful.
+
+ARIMA - behaviour
+
+GARCH - variance/volatility behaviour
