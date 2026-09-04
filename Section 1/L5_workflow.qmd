@@ -1,0 +1,442 @@
+---
+title: "Lecture 5 Workthrough"
+author: "Roxy Campher"
+format: html
+editor: visual
+---
+
+# Moving Average and Auto regressive models
+
+## Basic Introduction
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+# load required libraries:
+library(forecast)
+library(tseries)
+```
+
+First we will look at the AirPassengers dataset:
+
+```{r}
+plot(AirPassengers,
+     main = "Monthly Airline Passengers",
+     ylab = "Passengers",
+     xlab = "Year",
+     col = "purple")
+```
+
+Clearly there is an upward trend with strong yearly seasonality and increasing variance. So we can conclude that this series is definitely not stationary.
+
+Now we will inspect the Nile dataset:
+
+```{r}
+plot(Nile,
+     main = "Annual Nile River Flow",
+     col = "purple")
+```
+
+This time series looks like it could be stationary but we cannot be 100% sure based on visual inspection. So we will use the adf test to check.
+
+```{r}
+adf.test(Nile)
+```
+
+The p-value is not very large so we could reject $H_0$: non-stationarity and say that there is significant evidence to conclude that the Nile dataset could be stationary. But we will apply differencing and see if that improves the stationarity condition.
+
+```{r}
+nile_diff <- diff(Nile)
+
+plot(nile_diff,
+     main = "Differenced Nile Series")
+
+adf.test(nile_diff)
+```
+
+We see that the p-value is very small now and now we can confidently reject the null hypothesis and conclude that the Nile dataset is now statioanry after differencing. Differencing helps because it removes persistent changes in the level of the series.
+
+## ACF and PACF
+
+```{r}
+par(mfrow = c(1, 2))
+acf1 <- acf(Nile, main = "ACF for Nile.")
+acf2 <- acf(nile_diff, main = "ACF for differenced Nile.")
+par(mfrow = c(1,1))
+```
+
+The original Nile series shows persistent positive autocorrelation across many lags, suggesting non-stationarity. After first differencing, the autocorrelations decay much more rapidly and most lie within the 95% confidence bounds, indicating that differencing has made the series substantially more stationary. However, the significant negative autocorrelation at lag 1 suggests that some short-run dependence remains.
+
+A slowly declining ACF often suggests an AR(p) model but we can only be sure by comparing the PACF plot with the ACF plot.
+
+```{r}
+par(mfrow = c(1, 2))
+pacf1 <- pacf(Nile, main = "PACF for Nile.")
+pacf2 <- pacf(nile_diff, main = "PACF for differenced Nile.")
+par(mfrow = c(1,1))
+```
+
+The PACF for the original Nile series has a large spike at lag 1 and then decays quickly, indicating strong first-order dependence. After first differencing, most partial autocorrelations are relatively small, although a few lags remain significant. This suggests that differencing has removed much of the persistence, while some short-term dependence remains. The presence of a few significant PACF spikes does not necessarily indicate that further differencing is required, and additional differencing should be avoided unless there is stronger evidence of remaining non-stationarity.
+
+## AR Models
+
+**Simulated AR(1):**
+
+$Y_t = 0.7Y_{t-1} + \epsilon_t$
+
+```{r}
+set.seed(123)
+
+# Simulate a Time Series from an AR(1) model
+# ar1 is a single realisation from an AR(1) process
+ar1 <- arima.sim(
+  model = list(ar = 0.7),
+  n = 200
+)
+
+plot(ar1, main = "Simulated AR(1)")
+
+#lag1 <- lag(ar1, k = 1)
+
+# Plotting the lags for the ar 1 
+#points(lag1, col = "red")
+```
+
+```{r}
+par(mfrow = c(1, 2))
+acf(ar1)
+pacf(ar1)
+par(mfrow = c(1,1))
+```
+
+Here we observe the expected behaviour for AR models: The ACF plot shows the slower decay while the PACF plot shows a drastic decline from the first lag.
+
+Fit an AR(1):
+
+```{r}
+ar1_fit <- arima(ar1,
+                 order = c(1, 0, 0))
+
+ar1_fit
+```
+
+Here we set ARIMA(1, 0, 0) so the d and q terms are zero which means that this is an AR(1) process.
+
+**Simulated AR(2):**
+
+```{r}
+set.seed(123)
+
+ar2 <- arima.sim(
+  model = list(ar = c(0.6, -0.25)),
+  n = 200
+)
+
+plot(ar2)
+```
+
+```{r}
+par(mfrow = c(1, 2))
+acf(ar2)
+pacf(ar2)
+par(mfrow = c(1, 1))
+```
+
+Here the PACF shows stronger behaviour around the first two lags since we are working with an AR(2) model.
+
+```{r}
+ar2_fit <- arima(ar2,
+                 order = c(2, 0, 0))
+
+ar2_fit
+```
+
+ARMA(2, 0, 0) = AR(2)
+
+## MA models
+
+Simulate an MA(1) model:
+
+```{r}
+set.seed(123)
+
+ma1 <- arima.sim(
+  model = list(ma = 0.7),
+  n = 200
+)
+
+plot(ma1)
+```
+
+```{r}
+par(mfrow = c(1, 2))
+acf(ma1)
+pacf(ma1)
+par(mfrow = c(1, 1))
+```
+
+The ACF has a significant spike at lag 1 and then cuts off, while the PACF decays more gradually. This is the expected pattern for an MA(1) model.
+
+```{r}
+ma1_fit <- arima(ma1,
+                 order = c(0, 0, 1))
+
+ma1_fit
+```
+
+ARIMA(0, 0, 1) = MA(1)
+
+## Comparing AR and MA
+
+| Model      | ACF              | PACF             |
+|------------|------------------|------------------|
+| AR(p)      | tails off        | cuts off after p |
+| MA(q)      | cuts off after q | tails off        |
+| ARMA(p, q) | tails off        | tails off        |
+
+PACF helps identify AR order p and ACF helps identify MA order q.
+
+## ARMA models
+
+$Y_t = c + \phi Y_{t-1}+\varepsilon_t + \theta \varepsilon_{t-1}$ is an ARMA(1, 1).
+
+We will now simulate ARMA(1, 1):
+
+```{r}
+set.seed(123)
+
+arma11 <- arima.sim(
+  model = list(
+    ar = 0.6,
+    ma = 0.4
+  ),
+  n = 200
+)
+
+plot(arma11)
+```
+
+```{r}
+par(mfrow = c(1, 2))
+acf(arma11)
+pacf(arma11)
+par(mfrow = c(1, 1))
+```
+
+Neither really has a nice cutoff.
+
+```{r}
+arma_fit <- arima(
+  arma11,
+  order = c(1, 0, 1)
+)
+
+arma_fit
+```
+
+ARIMA(1, 0, 1) = ARMA(1, 1)
+
+## ARIMA models
+
+```{r}
+nile_diff <- diff(Nile)
+
+par(mfrow = c(1, 2))
+acf(nile_diff)
+pacf(nile_diff)
+par(mfrow = c(1, 1))
+```
+
+We can use the auto model fit function
+
+```{r}
+auto.arima(Nile)
+```
+
+Fit our own model
+
+```{r}
+fit1 <- Arima(
+  Nile,
+  order = c(1, 1, 0)
+)
+
+fit1
+```
+
+This means ARIMA(1, 1, 0), which translates to an AR(1) type structure with differencing.
+
+**Forecasting**
+
+```{r}
+fit1 <- Arima(
+  Nile,
+  order = c(1, 1, 0)
+)
+```
+
+```{r}
+fc <- forecast(
+  fit1,
+  h = 10
+)
+
+plot(fc)
+```
+
+## Residual Diagnostics
+
+```{r}
+checkresiduals(fit1)
+```
+
+Residual diagnostics for the ARIMA(1,1,0) model show that the residuals are centred around zero and appear approximately normally distributed. Most residual autocorrelations lie within the 95% confidence bounds, although a few significant spikes remain. Furthermore, the Ljung–Box test gives a p-value of 0.01355, which is below 0.05. We therefore reject the null hypothesis of uncorrelated residuals. This suggests that the residuals are not completely white noise and that the ARIMA(1,1,0) model may not have captured all of the dependence in the Nile series. Alternative specifications such as ARIMA(0,1,1) or ARIMA(1,1,1) could therefore be considered and compared.
+
+## Seasonal Data
+
+```{r}
+frequency(AirPassengers)
+```
+
+The seasonal period is 12.
+
+**Seasonal differencing**
+
+```{r}
+
+air_season_diff <- diff(
+  AirPassengers,
+  lag = 12
+)
+plot(air_season_diff)
+```
+
+## SARIMA models
+
+Written as $SARIMA(p, d, q)(P, D, Q)_s$
+
+```{r}
+fit_sarima <- Arima(
+  AirPassengers,
+  order = c(1, 1, 1),
+  seasonal = c(1, 1, 1)
+)
+fit_sarima
+```
+
+This is $SARIMA(1, 1, 1)(1, 1, 1)_{12}$
+
+The first $(1, 1, 1)$ describes the short-term behaviour and the second $(1, 1, 1)_{12}$ describes the yearly seasonal behaviour.
+
+**Seasonal ACF and PACF:**
+
+```{r}
+par(mfrow = c(1 ,2))
+acf(AirPassengers)
+pacf(AirPassengers)
+par(mfrow = c(1, 1))
+```
+
+There is some pattern around the seasonal lags (every 12 lags).
+
+```{r}
+air_log <- log(AirPassengers)
+air_stat <- diff(
+  diff(air_log),
+  lag = 12
+)
+plot(air_stat)
+```
+
+```{r}
+par(mfrow = c(1 ,2))
+acf(air_stat)
+pacf(air_stat)
+par(mfrow = c(1, 1))
+```
+
+These are much more useful for identifying a SARIMA structure because we've removed much of the trend and seasonality.
+
+**Automatic SARIMA selection**
+
+```{r}
+auto_fit <- auto.arima(AirPassengers)
+summary(auto_fit)
+```
+
+```{r}
+autoplot(
+forecast(
+  auto_fit,
+  h = 24
+)
+)
+```
+
+Here we can forecast the following 24 months.
+
+## Compare candidate models
+
+```{r}
+
+model1 <- Arima(
+  Nile,
+  order = c(1, 1, 0)
+)
+
+model2 <- Arima(
+  Nile,
+  order = c(0, 1, 1)
+)
+
+model3 <- Arima(
+  Nile,
+  order = c(1, 1, 1)
+)
+
+print(AIC(model1,
+    model2,
+    model3))
+```
+
+```{r}
+checkresiduals(model1)
+checkresiduals(model2)
+checkresiduals(model3)
+```
+
+| Model | AIC | Ljung-box p-value | Residual Conclusion |
+|------------------|------------------|------------------|------------------|
+| ARIMA(1, 1, 0) | 1281.480 | 0.01355 | Residual autocorrelation remains. |
+| ARIMA(0, 1, 1) | 1269.091 | 0.1458 | Residuals reasonably white noise. |
+| ARIMA(1, 1, 1) | 1267.255 | 0.2863 | Residuals the most consistent with white noise. |
+
+Among the three candidate models, ARIMA(1,1,1) appears to be the most suitable. It has the lowest AIC of 1267.255, indicating the best trade-off between model fit and complexity. Its Ljung–Box test also produces a p-value of 0.2863, so we fail to reject the null hypothesis that the residuals are uncorrelated. The residual ACF supports this conclusion, as the residual autocorrelations are largely contained within the 95% confidence bounds. ARIMA(0,1,1) is also reasonable, with a Ljung–Box p-value of 0.1458, but it has a slightly higher AIC. In contrast, ARIMA(1,1,0) has both the highest AIC and a significant Ljung–Box test, suggesting remaining autocorrelation. Therefore, ARIMA(1,1,1) would be preferred among these candidate models.
+
+To ensure that the ARIMA(1,1,1) model is the better model we will also check whether its coefficients are statistically meaningful compared to the ARIMA(0,1,1).
+
+```{r}
+z <- coef(model3) / sqrt(diag(model3$var.coef))
+p_values <- 2 * (1 - pnorm(abs(z)))
+
+cbind(
+  estimate = coef(model3),
+  se = sqrt(diag(model3$var.coef)),
+  z = z,
+  p_value = p_values
+)
+```
+
+Both of the coefficients are meaningful, so therefore the ARIMA(1,1,1) model is the most suitable among these three model.
+
+```{r}
+autoplot(
+  forecast(
+    model3,
+    h = 5
+  )
+)
+```

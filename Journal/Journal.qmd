@@ -1,38 +1,14 @@
 ---
-course: "Time Series"
-assignment: "Journal Entries"
-student-number: "CMPROX001"
-format:
-  pdf:
-    colorlinks: true
-    linkcolor: blue
-    urlcolor: blue
-    documentclass: article
-    fontsize: 12pt
-    geometry:
-      - left=3cm
-      - right=3cm
-      - top=2.5cm
-      - bottom=2.5cm
-    toc: false
-    toc-depth: 3
-    number-sections: false
-    listings: true
-    include-in-header: 
-      - metadata.tex
-      - header.tex
-    include-before-body: title.tex
-execute:
-  warning: false
-  message: false
+title: "Journal Entries"
+format: html
 editor: visual
 ---
 
 ## Journal Entry 1
 
-17/08/2026
+**17/08/2026**
 
-During this lecture we discussed the basics of Time series such as the different components that drive a time series and how they work. I understood most of what was discussed. 
+During this lecture we discussed the basics of Time series such as the different components that drive a time series and how they work. I understood most of what was discussed.
 
 I do want to practice plotting some of the built in R datasets to see what they look like. I want to see how a qualitative, continuous and discrete time series look so I worked through different datasets in L1_2_workflow.R.
 
@@ -40,10 +16,40 @@ I also worked through the first half of the "Time Series Analysis in R.pdf" code
 
 ## Journal Entry 2
 
-19/08/2026
+**19/08/2026**
 
 This week we had two lectures that covered benchmarks and forecast accuracy and the three main validation strategies. We learnt about benchmark forecast methods such as mean, naive, seasonal naive and the drift method. These are what more sophisticated models will be compared against to determine their forecasting accuracy. They help answer the question"Does our more complex model actually forecast better than a very simple benchmark?". The main Time Series validation strategies are: Walk-forward validation, expanding window validation and sliding window validation.
 
 In the "L3_4_workflow.R" file I will attempt to construct an expanding-window cross validation from first principles and I also completed the exercise in the slides on cross validation.
 
 The Time Series cross validation does make sense to me. The only thing that confuses me is whether there truly is a difference between expanding window and walk-forward windows.
+
+## Journal Entry 3
+
+**24/08/2026**
+
+Today we started with the Moving Average and Autoregressive models. We also had a look at ACF and PACF plots and how they can tell us which models work best with the data at hand. We also started to work with $ARMA$, $ARIMA$ and $SARIMA$ models as well.
+
+$MA$ processes are driven by q lagged random shocks not by lagged observations. It is a finite weighted sum of white noise terms wit fixed weights. The coefficients have to satisfy inveritibilty.
+
+$AR$ processes depend on past observations, "tomorrow's observations are related to yesterdays observations".
+
+The ACF measures the correlation of a value with its past self. It includes both direct and indirect effects. So the ACF asks how correlated todays observation is with the observation k periods ago overall.
+
+The PACF measures the direct autocorrelation without the intervening observations' linear effect.
+
+The $MA(q)$ and $AR(p)$ processes differ with their ACF and PACF outputs. For $MA$, the ACF cuts off immediately after lag q and decays gradually in the PACF. For $AR$, the ACF decays gradually and in the PACF cuts off immediately after lag p.
+
+$ARMA(p, q)$ models combine the ideas of $AR(p)$ and $MA(q)$. So $ARMA$ says that today's value depends on both the past observations and the past shocks (errors). The standard $ARMA$ models are used for stationary time series which is not always realistic. So, to combat this we use $ARIMA(p, d, q)$ models which introduce differencing. The d term tells us how many times differencing was required.
+
+$SARIMA(p, d, q)(P, D, Q)_s$ models are $ARIMA$ models that handle seasonality.
+
+The basic fitting of these models can be found in the "Section 1" folder in the "L5_workflow.qmd".
+
+## Journal Entry 4
+
+**31/08/2026**
+
+The biggest idea I took from this week is that forecasting is not simply about fitting a model. Before modelling, we need to understand whether the series is stationary or whether transformations or differencing are required. We also need to examine whether a trend or seasonal structure exists.
+
+After fitting a model, we also need to check the residuals and evaluate its forecasting performance on unseen data. Simple benchmark methods and time-series cross-validation therefore provide an important reference point before deciding that a more complicated model is actually better.

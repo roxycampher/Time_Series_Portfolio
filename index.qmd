@@ -1,0 +1,47 @@
+::: {.hero}
+# Time Series Portfolio
+
+A collection of time series analyses exploring forecasting, seasonality, model comparison and real-world data applications.
+:::
+
+## Projects
+
+::: {.project-grid}
+
+::: {.project-card}
+### Project 1.1
+
+Exploratory time series analysis using financial and economic data.
+
+[Open project](Projects/Project 1.1/Project1.1.qmd)
+:::
+
+::: {.project-card}
+### Project 1.2
+
+Forecasting weekly Eskom electricity demand using temperature and dam-level patterns.
+
+[Open project](Projects/Project 1.2/Project1.2.qmd)
+:::
+
+:::
+
+## Journal
+
+::: {.project-card}
+### Portfolio Journal
+
+Reflections on the workflow, modelling choices and development of the portfolio.
+
+[Open journal](Journal/Journal.qmd)
+:::
+
+## AI Use
+
+::: {.project-card}
+### AI Use Log
+
+A record of how AI was used to support the project.
+
+[Open AI use log](ai-use-log.qmd)
+:::

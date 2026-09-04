@@ -1,0 +1,48 @@
+project:
+  type: website
+  output-dir: _site
+  execute-dir: file
+
+execute:
+  echo: false
+  warning: false
+  message: false
+
+website:
+  title: "Time Series Portfolio"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+
+      - href: Journal/Journal.qmd
+        text: Journal
+
+      - text: Section 1
+        menu:
+          - href: Section 1/L1_2_workflow.qmd
+            text: Lecture 1 and 2
+          - href: Section 1/L3_4_workflow.qmd
+            text: Lecture 3 and 4
+          - href: Section 1/L5_workflow.qmd
+            text: Lecture 5
+          - href: Section 1/Exercise 1.qmd
+            text: Exercise 1
+
+      - href: Projects/Project 1.1/Project1.1.qmd
+        text: Project 1.1
+
+      - href: Projects/Project 1.2/Project1.2.qmd
+        text: Project 1.2
+
+      - href: ai-use-log.qmd
+        text: AI Use Log
+
+format:
+  html:
+    theme: cosmo
+    css: style.css
+    toc: true
+    toc-location: right
+    code-fold: true
+    code-tools: true

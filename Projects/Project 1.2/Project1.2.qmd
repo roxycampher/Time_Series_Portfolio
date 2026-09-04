@@ -1,0 +1,717 @@
+---
+title: "Project 1.2"
+author: "Roxy Campher"
+format: html
+editor: visual
+---
+
+# Project 1.2 - Time Series Analysis of Eskom data
+
+The aim of this project is to investigate whether weekly Eskom electricity demand can be explained and forecast using temperature and dam-level patterns. Eskom demand is the response variable, while average temperature and dam levels are included as external predictors. The results are interpreted in the broader context of climate-related pressure on electricity and water systems.
+
+## Data preparation and exploratory analysis
+
+```{r}
+# load required libraries:
+library(ggplot2)
+library(dplyr)
+library(tsibble)
+library(lubridate)
+library(feasts)
+library(fable)
+library(forecast)
+library(tidyr)
+library(tseries)
+```
+
+### Eskom Demand
+
+The Eskom dataset was retrieved from the Amatuba site from: <https://www.eskom.co.za/dataportal>
+
+The dataset includes the average hourly demand that needs to be supplied by all resources that Eskom has contracts with. It is the residual demand including demand supplied by self-dispatched generation.
+
+```{r}
+# read in the eskom data
+esk_dat <- read.csv("ESK6816.csv")
+
+eskom <- esk_dat |>
+  select(
+    Date = Date.Time.Hour.Beginning, # Date index
+    Demand = RSA.Contracted.Demand # Demand
+  ) |>
+  mutate(
+    Date = ymd_hm(Date) # set the date to correct format
+  ) |>
+  filter(Date >= ymd("2019-01-01")) |>
+  arrange(Date) |>
+  as_tsibble(index = Date) # create a tsibble
+
+#eskom |>
+#  count_gaps() # are there any gaps in the data? (Commented out for printing purposes)
+
+eskom <- eskom |> # fill the gaps
+  fill_gaps(.full = TRUE)
+
+eskom |> # Plot the data as is (hourly)
+  filter(!is.na(Demand)) |>
+  ggplot(aes(x = Date, y = Demand)) +
+  geom_line(col = "purple") +
+  labs(
+    title = "Eskom Contracted Demand: Hourly Data",
+    x = "Date",
+    y = "Demand"
+  )
+```
+
+Here we see that the hourly data is too granular to forecast because then we will be forecasting a lot of noise. So, we will explore different aggregations of the Demand series so that we can choose the best level of aggregation.
+
+```{r}
+eskom_daily <- eskom |>
+  index_by(Day = as_date(Date)) |>
+  summarise(
+    Demand = mean(Demand, na.rm = TRUE)
+  )
+
+eskom_weekly <- eskom |>
+  index_by(Week = yearweek(Date)) |>
+  summarise(
+    Demand = mean(Demand, na.rm = TRUE)
+  )
+
+eskom_monthly <- eskom |>
+  index_by(Month = yearmonth(Date)) |>
+  summarise(
+    Demand = mean(Demand, na.rm = TRUE)
+  )
+
+ggplot(eskom_daily, aes(x = Day, y = Demand)) +
+  geom_line(col = "purple") +
+  labs(
+    title = "Eskom Contracted Demand: Daily Average",
+    x = "Date",
+    y = "Average daily demand"
+  )
+
+ggplot(eskom_weekly, aes(x = Week, y = Demand)) +
+  geom_line(col = "purple") +
+  labs(
+    title = "Eskom Contracted Demand: Weekly Average",
+    x = "Week",
+    y = "Average weekly demand"
+  )
+
+ggplot(eskom_monthly, aes(x = Month, y = Demand)) +
+  geom_line(col = "purple") +
+  labs(
+    title = "Eskom Contracted Demand: Monthly Average",
+    x = "Month",
+    y = "Average monthly demand"
+  )
+```
+
+From the different aggregations we see that the weekly aggregation will work best as it is the best middle ground between the noisy daily data and overly smooth monthly data.
+
+The monthly data also has too few points to model ARIMA, SARIMA and SARIMAX.
+
+```{r}
+eskom_weekly |>
+  gg_season(Demand) +
+  labs(
+    title = "Seasonal Plot of Weekly Eskom Demand",
+    x = "Month of year",
+    y = "Average weekly Eskom demand"
+  )
+
+eskom_weekly |>
+  ACF(Demand) |>
+  autoplot() +
+  labs(
+    title = "ACF of Weekly Eskom Demand",
+    x = "Lag in weeks",
+    y = "Autocorrelation"
+  )
+
+eskom_weekly |>
+  PACF(Demand) |>
+  autoplot() +
+  labs(
+    title = "PACF of Weekly Eskom Demand",
+    x = "Lag in weeks",
+    y = "Partial autocorrelation"
+  )
+```
+
+The seasonal plot of the weekly Eskom demand it is clear that there is a broadly seasonal pattern. It is clear that the demand is higher in the middle of the year and lower towards the end of the year. The 2020 year follows a different pattern with a sharp drop at March. This drop reflects the effect of the pandemic that occurred at the time. This suggests a structural break in the series that we should keep in mind for the forecasting of demand.
+
+The ACF plot shows high positive autocorrelation at early lags, especially at lag 1. This means that Eskom demand this week is strongly related to demand in previous weeks. The correlations gradually decline which tells us that there is not a lot of random variation as a pattern is followed.
+
+The PACF plot has a large spike at lag 1 then has an abrupt decline and the remainder of lags have small autocorrelation. This indicates that an autoregressive component like especially AR(1), may be useful when modelling weekly Eskom demand.
+
+We will test for stationarity in the Eskom dataset:
+
+```{r}
+adf.test(na.omit(eskom_weekly$Demand))
+```
+
+We see that the p-value is very small so we can reject $H_0$ and conclude that there is significant evidence to suggest that the Eskom data is stationary. So, no differencing or transformation was applied before modelling.
+
+```{r}
+eskom_weekly |>
+  filter(!is.na(Demand)) |>
+  model(
+    STL(Demand ~ trend() + season(period = "year"))
+  ) |>
+  components() |>
+  autoplot() +
+  labs(title = "STL Decomposition of Weekly Eskom Demand")
+```
+
+The STL decomposition shows that weekly Eskom demand contains both a long-term trend and a clear yearly seasonal component. The trend decreases sharply around early 2020 before stabilising, while the seasonal component captures recurring annual fluctuations in demand. The large negative remainder around March/April 2020 suggests an unusual shock, likely associated with the COVID-19 lockdown, which is not explained by the regular seasonal pattern.
+
+Next we will look at the lags of the Eskom time series:
+
+```{r}
+eskom_weekly |>
+  gg_lag(Demand, geom = "point") +
+  guides(colour = "none") +
+  labs(
+    title = "Lag Plot of Weekly Eskom Demand",
+    x = "Lagged weekly demand",
+    y = "Current weekly demand"
+  )
+```
+
+The lag plot shows a strong positive relationship between weekly demand and its recent lagged values, especially at lags 1 to 3. This suggests strong short-term dependence in Eskom demand, supporting the use of autoregressive models. The relationship weakens at longer lags, while several outlying low-demand points reflect unusual periods such as the 2020 lockdown shock.
+
+### Temperature
+
+The temperature data was retrieved from <https://meteostat.net/en/place/za/rosebank?s=68916&t=2023-01-01/2023-12-31>
+
+The temperature was recorded in Cape Point in Cape Town across various years, the years 2018-2026 were used in this analysis.
+
+```{r}
+temp_files <- list.files(
+  pattern = "^temp_[0-9]{4}\\.csv$",
+  full.names = TRUE
+)
+
+temp_dat <- temp_files |>
+  lapply(read.csv) |>
+  bind_rows()
+
+temperature <- temp_dat |>
+  select(
+    Date = date,
+    Average_Temperature = tavg,
+    Minimum_Temperature = tmin,
+    Maximum_Temperature = tmax
+  ) |>
+  mutate(
+    Date = as_date(ymd_hms(Date)),
+    Average_Temperature = as.numeric(Average_Temperature),
+    Minimum_Temperature = as.numeric(Minimum_Temperature),
+    Maximum_Temperature = as.numeric(Maximum_Temperature)
+  ) |>
+  filter(
+    Date >= ymd("2019-01-01"),
+    Date <= today()
+  ) |>
+  arrange(Date) |>
+  as_tsibble(index = Date)
+
+#temperature |>
+#  count_gaps()
+
+temperature |>
+  ggplot(aes(x = Date, y = Average_Temperature)) +
+  geom_line(col = "firebrick") +
+  labs(
+    title = "Average Temperature: Daily Data",
+    x = "Date",
+    y = "Average temperature (degrees C)"
+  )
+```
+
+After plotting the daily temperature we see that it is too granular so we will again plot the different aggregations to determine the best granularity to work with in the analysis.
+
+```{r}
+temperature_weekly <- temperature |>
+  index_by(Week = yearweek(Date)) |>
+  summarise(
+    Average_Temperature = mean(Average_Temperature, na.rm = TRUE),
+    Minimum_Temperature = mean(Minimum_Temperature, na.rm = TRUE),
+    Maximum_Temperature = mean(Maximum_Temperature, na.rm = TRUE)
+  )
+
+temperature_monthly <- temperature |>
+  index_by(Month = yearmonth(Date)) |>
+  summarise(
+    Average_Temperature = mean(Average_Temperature, na.rm = TRUE),
+    Minimum_Temperature = mean(Minimum_Temperature, na.rm = TRUE),
+    Maximum_Temperature = mean(Maximum_Temperature, na.rm = TRUE)
+  )
+
+ggplot(temperature_weekly, aes(x = Week, y = Average_Temperature)) +
+  geom_line(col = "firebrick") +
+  labs(
+    title = "Average Temperature: Weekly Average",
+    x = "Week",
+    y = "Average weekly temperature (degrees C)"
+  )
+
+ggplot(temperature_monthly, aes(x = Month, y = Average_Temperature)) +
+  geom_line(col = "firebrick") +
+  labs(
+    title = "Average Temperature: Monthly Average",
+    x = "Month",
+    y = "Average monthly temperature (degrees C)"
+  )
+```
+
+After plotting the weekly and monthly aggregations of the temperature time series, we see again that although the monthly data is easier to interpret it will not have enough data points for us to conduct a proper analysis. So the analysis of the temperature data will be done on the weekly aggregation as it is less granular than the daily temperature data and it has enough data point for us to use all the models.
+
+The weekly data smooths the daily noise and still preserves the seasonal temperature pattern well.
+
+```{r}
+temperature_weekly |>
+  gg_season(Average_Temperature) +
+  labs(
+    title = "Seasonal Plot of Weekly Average Temperature",
+    x = "Month of year",
+    y = "Average weekly temperature (degrees C)"
+  )
+
+temperature_weekly |>
+  ACF(Average_Temperature) |>
+  autoplot() +
+  labs(
+    title = "ACF of Weekly Average Temperature",
+    x = "Lag in weeks",
+    y = "Autocorrelation"
+  )
+
+temperature_weekly |>
+  PACF(Average_Temperature) |>
+  autoplot() +
+  labs(
+    title = "PACF of Weekly Average Temperature",
+    x = "Lag in weeks",
+    y = "Partial autocorrelation"
+  )
+```
+
+The seasonal plot shows a clear yearly temperature cycle where the temperatures are highest in January/February and lower in the middle of the year around June to August before rising again towards the end of the year.
+
+The ACF shows strong positive autocorrelation at short lags. This means warm weeks tend to be followed by warm weeks and cool weeks tend to be followed by cool weeks. Then the ACF gradually declines and becomes negative at longer lags. That makes sense for seasonal temperature as weeks about half a year apart tend to have opposite temperatures.
+
+The PACF has a large spike at lag 1 with smaller significant spikes after that. Most of the direct dependence in weekly temperature is explained by the previous week’s temperature. The strong lag 1 PACF suggests an autoregressive component may be useful if modelling temperature directly.
+
+We will test the temperature data for stationarity as well:
+
+```{r}
+adf.test(na.omit(temperature_weekly$Average_Temperature))
+```
+The p-value is very small so we can reject the null hypothesis and conclude that the Weekly Average temperature data is stationary. No differencing or transformation was applied before modelling.
+
+
+```{r}
+temperature_weekly_stl <- temperature_weekly |>
+  fill_gaps(.full = TRUE) |>
+  mutate(
+    Average_Temperature = na.interp(Average_Temperature)
+  )
+
+temperature_weekly_stl |>
+  model(
+    STL(Average_Temperature ~ trend() + season(period = "year"))
+  ) |>
+  components() |>
+  autoplot() +
+  labs(title = "STL Decomposition of Weekly Average Temperature")
+
+
+```
+
+The STL decomposition shows that weekly average temperature is dominated by a strong annual seasonal pattern, with temperatures above trend during summer and below trend during winter. The trend component is relatively stable over most of the period, although it rises toward the end of the sample. The remainder fluctuates around zero, suggesting that the trend and seasonal components explain much of the variation in temperature.
+
+Next we will look at the lags of the Temperature data:
+
+```{r}
+temperature_weekly |>
+  gg_lag(Average_Temperature, geom = "point") +
+  guides(colour = "none") +
+  labs(
+    title = "Lag Plot of Weekly Average Temperature",
+    x = "Lagged weekly average temperature (degrees C)",
+    y = "Current weekly average temperature (degrees C)"
+  )
+```
+
+The lag plot shows strong positive dependence in weekly average temperature, particularly at shorter lags. This indicates that temperature is persistent over time, with current weekly temperature strongly related to temperatures in previous weeks. The clustering by week of the year also reflects the strong seasonal cycle in the temperature series.
+
+### Dam Levels
+
+The dam level data was retrieved from the City of Cape Town Open Data Portal. The data includes Dam levels for major and minor dams in the Western Cape water supply system.
+
+```{r}
+dam_dat <- read.csv("Dam_Levels_from_2000.csv")
+
+dam_levels <- dam_dat |>
+  select(
+    Date = DATE,
+    Dam_Level = TOTAL_STORED___BIG_6_Current,
+    Dam_Storage = TOTAL_STORED___BIG_6_STORAGE
+  ) |>
+  mutate(
+    Date = dmy(gsub("Sept", "Sep", Date)),
+    Dam_Level = as.numeric(Dam_Level),
+    Dam_Storage = as.numeric(Dam_Storage)
+  ) |>
+  filter(
+    Date >= ymd("2019-01-01"),
+    Date <= today()
+  ) |>
+  arrange(Date) |>
+  as_tsibble(index = Date)
+
+#dam_levels |>
+#  count_gaps()
+
+dam_levels <- dam_levels |>
+  fill_gaps(.full = TRUE)
+
+dam_levels |>
+  filter(!is.na(Dam_Level)) |>
+  ggplot(aes(x = Date, y = Dam_Level)) +
+  geom_line(col = "steelblue") +
+  labs(
+    title = "Total Stored Dam Levels: Daily Data",
+    x = "Date",
+    y = "Dam level (%)"
+  )
+```
+
+First we plot the daily dam data and we see that it offers too much granularity and an aggregation that is smoother will be better for our analysis.
+
+```{r}
+dam_levels_weekly <- dam_levels |>
+  index_by(Week = yearweek(Date)) |>
+  summarise(
+    Dam_Level = mean(Dam_Level, na.rm = TRUE),
+    Dam_Storage = mean(Dam_Storage, na.rm = TRUE)
+  )
+
+ggplot(dam_levels_weekly, aes(x = Week, y = Dam_Level)) +
+  geom_line(col = "steelblue") +
+  labs(
+    title = "Total Stored Dam Levels: Weekly Average",
+    x = "Week",
+    y = "Average weekly dam level (%)"
+  )
+
+dam_levels_monthly <- dam_levels |>
+  index_by(Week = yearmonth(Date)) |>
+  summarise(
+    Dam_Level = mean(Dam_Level, na.rm = TRUE),
+    Dam_Storage = mean(Dam_Storage, na.rm = TRUE)
+  )
+
+ggplot(dam_levels_monthly, aes(x = Week, y = Dam_Level)) +
+  geom_line(col = "steelblue") +
+  labs(
+    title = "Total Stored Dam Levels: Monthly Average",
+    x = "Monthly",
+    y = "Average monthly dam level (%)"
+  )
+```
+
+Again we plot the weekly and monthly aggregation of the Dam data and we see that the weekly aggregation provides a better granularity for our analysis. The monthly data is too smooth and we risk having too little observations for a proper forecast. The weekly aggregation is smooth and still contains elements of the seasonal dam level pattern.
+
+```{r}
+dam_levels_weekly |>
+  gg_season(Dam_Level) +
+  labs(
+    title = "Seasonal Plot of Weekly Dam Levels",
+    x = "Week of year",
+    y = "Average weekly dam level (%)"
+  )
+
+dam_levels_weekly |>
+  ACF(Dam_Level) |>
+  autoplot() +
+  labs(
+    title = "ACF of Weekly Dam Levels",
+    x = "Lag in weeks",
+    y = "Autocorrelation"
+  )
+
+dam_levels_weekly |>
+  PACF(Dam_Level) |>
+  autoplot() +
+  labs(
+    title = "PACF of Weekly Dam Levels",
+    x = "Lag in weeks",
+    y = "Partial autocorrelation"
+  )
+
+```
+
+The seasonal plot shows a clear annual pattern in dam levels. Dam storage tends to decline during the warmer, drier summer and autumn months, before increasing sharply during the winter rainfall period. Levels generally peak around late winter or early spring, then begin declining again toward summer. The vertical separation between years suggests that dam levels vary substantially from year to year, likely reflecting differences in rainfall, water usage and starting storage conditions.
+
+The ACF shows very strong positive autocorrelation at short lags. This means dam levels change slowly. If dam levels are high this week, they are likely still high next week. The ACF then gradually declines and eventually becomes negative. That suggests strong seasonality. Weeks far apart in the year may be in opposite parts of the dam cycle.
+
+The PACF indicates that most of the direct dependence is captured by lag 1. This suggests that an autoregressive component may be useful when modelling dam levels, since current dam levels are strongly related to the previous week’s levels.
+
+We will also test the Dam data for stationarity:
+
+```{r}
+adf.test(na.omit(dam_levels_weekly$Dam_Level))
+```
+Here we see that the p-value is very small so we can again reject the null hypothesis of no stationarity and conclude that there is significant evidence to suggest that the data is stationary. So, no differencing or transformation was applied before modelling.
+
+
+```{r}
+dam_levels_weekly |>
+  filter(!is.na(Dam_Level)) |>
+  model(
+    STL(Dam_Level ~ trend() + season(period = "year"))
+  ) |>
+  components() |>
+  autoplot() +
+  labs(title = "STL Decomposition of Weekly Dam Levels")
+```
+
+The STL decomposition shows that weekly dam levels are strongly seasonal, with a repeated annual cycle linked to winter rainfall and summer draw down. The trend component indicates medium-term changes in overall storage, while the remainder captures irregular shocks not explained by normal seasonal behaviour. The large seasonal component suggests that any forecasting model for dam levels should account for annual seasonality.
+
+Next we will plot the lags for the Dam level data:
+
+```{r}
+dam_levels_weekly |>
+  gg_lag(Dam_Level, geom = "point") +
+  guides(colour = "none") +
+  labs(
+    title = "Lag Plot of Weekly Dam Levels",
+    x = "Lagged weekly dam level (%)",
+    y = "Current weekly dam level (%)"
+  )
+```
+
+The lag plot shows a strong positive relationship between current weekly dam levels and previous weekly dam levels, especially at shorter lags. This indicates strong persistence in the dam-level series. The curved pattern at longer lags reflects the seasonal cycle, as dam levels gradually decline during the dry season and increase during the winter rainfall season.
+
+### Relationship Between Predictors and Electricity Demand
+
+Before fitting time series regression models, scatterplots were used to explore the relationship between Eskom electricity demand and the proposed predictor variable (average temperature and dam levels). This helps assess whether the predictors show any visible association with electricity demand and whether they may be useful as explanatory variables in later forecasting models.
+
+```{r}
+combined_weekly <- eskom_weekly |>
+  left_join(temperature_weekly, by = "Week") |>
+  left_join(dam_levels_weekly, by = "Week") |>
+  select(
+    Week,
+    Demand,
+    Average_Temperature,
+    Dam_Level
+  ) |>
+  filter(
+    !is.na(Demand),
+    !is.na(Average_Temperature),
+    !is.na(Dam_Level)
+  ) |>
+  as_tsibble(index = Week)
+
+combined_weekly_regular <- combined_weekly |>
+  fill_gaps(.full = TRUE)
+
+
+combined_weekly |>
+  ggplot(aes(x = Average_Temperature, y = Demand)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Weekly Eskom Demand vs Temperature",
+    x = "Average weekly temperature",
+    y = "Average weekly demand"
+  )
+
+combined_weekly |>
+  ggplot(aes(x = Dam_Level, y = Demand)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Weekly Eskom Demand vs Dam Levels",
+    x = "Average weekly dam level (%)",
+    y = "Average weekly demand"
+  )
+```
+
+These plots do not account for time dependence or seasonality, but they provide an initial visual indication of whether the predictors may help explain variation in electricity demand.
+
+The scatterplot of weekly Eskom demand against average weekly temperature shows a weak negative relationship. This suggests that electricity demand is slightly higher during cooler weeks and slightly lower during warmer weeks. However, the points are widely scattered, indicating that temperature alone does not explain most of the variation in demand.
+
+The scatterplot of weekly Eskom demand against average weekly dam levels shows little evidence of a strong linear relationship. The fitted line is almost flat, suggesting that dam levels alone are unlikely to be a strong direct predictor of Eskom demand.
+
+```{r}
+combined_weekly_scaled <- combined_weekly |>
+  mutate(
+    Demand_scaled = scale(Demand)[, 1],
+    Temperature_scaled = scale(Average_Temperature)[, 1],
+    Dam_Level_scaled = scale(Dam_Level)[, 1]
+  )
+
+combined_weekly_scaled |>
+  select(Week, Demand_scaled, Temperature_scaled, Dam_Level_scaled) |>
+  pivot_longer(-Week, names_to = "Series", values_to = "Value") |>
+  ggplot(aes(x = Week, y = Value, col = Series)) +
+  geom_line() +
+  labs(
+    title = "Standardised Weekly Time Series",
+    x = "Week",
+    y = "Standardised value"
+  )
+```
+
+The standardised weekly time-series plot allows the three variables to be compared on a common scale. Temperature and dam levels show clear seasonal patterns, with dam levels generally moving in the opposite direction to temperature. Which makes sense since when the temperatures are cooler, dam levels tend to rise more than when temperatures are warmer.
+
+Eskom demand is more volatile and includes sharp drops, particularly around early 2020. Overall, the plot suggests that temperature and dam levels may help explain some seasonal variation in demand, but they are unlikely to fully explain electricity demand on their own.
+
+## Model fitting and forecasting
+
+Benchmark models such as mean, naive, seasonal naive and drift are first fitted to provide a baseline. More complex models such as AR, MA, ARIMA, SARIMA, SARIMAX and time series regression are then compared against these benchmarks using out-of-sample forecast accuracy.
+
+The models will be compared using out-of-sample accuracy measures to determine whether the additional complexity leads to better predictive performance.
+
+### Simple forecast models
+
+We will use the Eskom demand data to model the benchmark forecasts.
+
+```{r}
+benchmark_data <- combined_weekly |>
+  select(Week, Demand) |>
+  fill_gaps(.full = TRUE) |>
+  mutate(
+    Demand = na.interp(Demand) # interpolates the missing data
+  )
+
+n_test <- 52 # test set size
+n_train <- nrow(benchmark_data) - n_test # train set
+
+# Split the data
+train <- benchmark_data |>
+  slice(1:n_train)
+
+test <- benchmark_data |>
+  slice((n_train + 1):nrow(benchmark_data))
+
+# fit the benchmark models
+benchmark_fit <- train |>
+  model(
+    mean = MEAN(Demand),
+    naive = NAIVE(Demand),
+    seasonal_naive = SNAIVE(Demand),
+    drift = RW(Demand ~ drift())
+  )
+
+benchmark_fc <- benchmark_fit |>
+  forecast(h = n_test) # forecast 52 weeks ahead
+
+# plot the forecasts
+benchmark_fc |>
+  autoplot(benchmark_data) +
+  facet_wrap(~ .model, ncol = 1) +
+  labs(
+    title = "Benchmark Forecasts for Weekly Eskom Demand",
+    x = "Week",
+    y = "Average weekly Eskom demand"
+  )
+
+accuracy(benchmark_fc, test)
+```
+
+The forecast plot compares all of the simple benchmark methods. The mean model forecasts the historical average demand, the naive model forecasts using the most recent observed demand, the drift model allows a gradual trend and the seasonal naive model forecasts using demand from the same seasonal period in the past.
+
+From the plot, the seasonal naive forecast looks most realistic because it follows the repeated yearly pattern more closely. The mean model is very flat, while the naive and drift models mostly extend the last observed level forward.
+
+The seasonal naive model produced the most accurate benchmark forecasts with the lowest RMSE, MAE and MAPE values. This suggests that weekly Eskom demand has important seasonal structure, since using demand from the same period in the previous year performs better than simply using the overall mean or most recent value.
+
+Although the seasonal naive model is the best benchmark, the residual autocorrelation remains positive. This indicates that the benchmark forecasts do not capture all time dependence in the series. This motivates fitting more complex models such as ARIMA, SARIMA or SARIMAX.
+
+### Autoregressive models
+
+```{r}
+# Prepare modelling data
+model_data <- combined_weekly |>
+  select(Week, Demand, Average_Temperature, Dam_Level) |>
+  fill_gaps(.full = TRUE) |>
+  mutate(
+    Demand = na.interp(Demand),
+    Average_Temperature = na.interp(Average_Temperature),
+    Dam_Level = na.interp(Dam_Level)
+  )
+
+# Train/test split: last 52 weeks for testing
+n_test <- 52
+n_train <- nrow(model_data) - n_test
+
+train <- model_data |>
+  slice(1:n_train)
+
+test <- model_data |>
+  slice((n_train + 1):nrow(model_data))
+
+# Fit the autoregressive models
+fit_ts_models <- train |>
+  model(
+    # AR(1): demand depends on its own previous value
+    AR = ARIMA(Demand ~ pdq(1, 0, 0) + PDQ(0, 0, 0)),
+    
+    # MA(1): demand depends on past forecast errors
+    MA = ARIMA(Demand ~ pdq(0, 0, 1) + PDQ(0, 0, 0)),
+    
+    # ARIMA: automatic non-seasonal ARIMA
+    ARIMA = ARIMA(Demand ~ pdq() + PDQ(0, 0, 0)),
+    
+    # SARIMA: ARIMA with yearly seasonality for weekly data
+    SARIMA = ARIMA(Demand ~ pdq() + PDQ(period = 52)),
+    
+    # SARIMAX: SARIMA with external predictors
+    SARIMAX = ARIMA(
+      Demand ~ Average_Temperature + Dam_Level + pdq() + PDQ(period = 52)
+    )
+  )
+
+# Forecast on the test set
+fc_ts_models <- fit_ts_models |>
+  forecast(new_data = test)
+
+# Plot forecasts
+fc_ts_models |>
+  autoplot(model_data) +
+  facet_wrap(~ .model, ncol = 1) +
+  labs(
+    title = "Forecasts from AR, MA, ARIMA, SARIMA and SARIMAX Models",
+    x = "Week",
+    y = "Average weekly Eskom demand"
+  )
+
+accuracy(fc_ts_models, test)
+```
+
+The SARIMA model performed best among the ARIMA-family models, with the lowest RMSE, MAE and MAPE. This supports the earlier EDA, which showed clear yearly seasonality in weekly Eskom demand. The SARIMAX model did not improve on SARIMA, suggesting that temperature and dam levels did not add useful predictive information in this model specification. However, the residual ACF1 values remain relatively high, indicating that some autocorrelation remains and that further model refinement may be needed.
+
+```{r}
+fit_ts_models |>
+  select(SARIMA) |>
+  gg_tsresiduals()
+
+# Test for remaining autocorrelation
+fit_ts_models |>
+  select(SARIMA) |>
+  augment() |>
+  features(.innov, ljung_box, lag = 24)
+```
+
+The data were not manually differenced before fitting ARIMA/SARIMA models, since the ARIMA procedure selects appropriate differencing terms as part of the model fitting process. Instead, stationarity was assessed through residual diagnostics after fitting. The residual ACF showed little remaining autocorrelation and the Ljung-Box test was not significant, suggesting that the SARIMA model captured the main time-dependent structure in the series.
+
+### Time series regression
+
+Time series regression with external regressors.

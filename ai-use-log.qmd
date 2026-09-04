@@ -1,12 +1,26 @@
 ---
 title: "AI Log"
 author: "Roxy Campher"
-format: pdf
+format: html
 editor: visual
 ---
 
 ## AI usage log
 
-20/08/2026
+**20/08/2026**
 
 Asked for assistance on data cleaning and how to read in excel files and exclude the headings.
+
+<https://chatgpt.com/share/6a9ab1e1-b5f8-83ea-949e-572dde4c5450>
+
+**01/09/2026**
+
+How to plot the EDAfor the Eskom data and aggregate to daily, weekly and monthly.
+
+<https://chatgpt.com/share/6a9ab2bb-6c8c-83ea-84c7-81a8b7612a3b>
+
+**04/09/2026**
+
+How to interpret the decomposition plot.
+
+<https://chatgpt.com/share/6a9ab5a2-9de4-83ea-8443-399b2b9f3704>

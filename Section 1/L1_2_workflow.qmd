@@ -1,23 +1,28 @@
 ---
 title: "Lecture 1 and 2 Workthrough"
 author: "Roxy Campher"
-format: pdf
+format: html
 editor: visual
 ---
 
 ```{r}
-#| echo: false
-
 # load required libraries:
 library(betareg)
 library(ggplot2)
 library(dplyr)
 library(purrr)
+library(forecast)
 ```
+
+## Plotting different Time Series:
 
 For a Qualitative Time Series:
 
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
 library(ctsfeatures)
 data("SleepStages")
 
@@ -83,12 +88,16 @@ barplot(
 )
 ```
 
+## Time Series Analysis in R:
+
 Now I will follow the same structure as in the "Time Series Analysis in R.pdf" and practice some of the functions taught in class.
 
-Aggregation example:
+*Aggregation example:*
 
 ```{r}
 data("AirPassengers")
+
+is.ts(AirPassengers)
 
 print(frequency(AirPassengers))
 
@@ -108,7 +117,7 @@ plot.ts(months_to_years,
 
 Since the AirPassenger data is monthly (frequency = 12) I aggregated it to annual data to see what it would look like since we are lower the granularity.
 
-Window:
+*Window example:*
 
 Now I want to plot a subset of the AirPassenger data to practice writing out the window function.
 
@@ -126,7 +135,7 @@ plot.ts(window1,
 )
 ```
 
-Trying lag() and diff() on a simulated dataset:
+*Trying lag() and diff() on a simulated dataset:*
 
 ```{r}
 ts_sim <- ts(c(11, 16, 21, 33, 40, 54, 59, 60, 66, 70, 73, 75),
@@ -144,7 +153,7 @@ diff_ts <- diff(ts_sim, differences = 1)
 diff_ts
 ```
 
-Checking out ts.union() and ts.intersect():
+*Checking out ts.union() and ts.intersect():*
 
 ```{r}
 ts_a <- ts(1:10, start = c(2023, 1), frequency = 12)
@@ -159,7 +168,7 @@ itersect_ts <- ts.intersect(ts_a, ts_b)
 itersect_ts
 ```
 
-What is the structure of the ts object:
+*What is the structure of the ts object:*
 
 ```{r}
 raw_data <- data.frame(
@@ -175,3 +184,21 @@ plot(decom)
 
 plot(ts_sim2, type = "o", pch = 20, main = "Demonstration of ts Object.", ylab = "Values", xlab = "Time", col = "hotpink")
 ```
+
+Plot the lags of the time series to see if there is autocorrelation between observations
+
+```{r}
+# AirPassengers
+ggseasonplot(AirPassengers, year.labels = TRUE)
+```
+
+Shows that the months behave similar across each year - we see that there is clear seasonality across each year.
+
+```{r}
+ggAcf(
+  AirPassengers,
+  lag.max = 48
+)
+```
+
+Seasonality is also present in the ACF plot, as the lags progress (go back in time) we see that the same pattern arises across every 12 lags (every 12 months).

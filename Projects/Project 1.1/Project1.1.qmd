@@ -1,17 +1,15 @@
 ---
 title: "Project 1.1"
 author: "Roxy Campher"
-format: pdf
+format: html
 editor: visual
 ---
 
 # Project 1.1 - Comparing Models for Daily Sampled South African Market Index Data
 
-## Exploratory Data Analysis
+## Data Preparation and Exploratory Data Analysis
 
 ```{r}
-#| echo: false
-
 # load required libraries:
 library(ggplot2)
 library(dplyr)
@@ -66,3 +64,7 @@ albi_ts <- ts(
 
 plot(albi_ts, main = "ALBI Index Levels.", xlab = "Time (daily)", ylab = "Index Level", col = "blue")
 ```
+
+## Models to be compared
+
+So for this dataset I thought that fitting and compapring GARCH to another model would be quite interesting as this dataset works well for volatility models.
